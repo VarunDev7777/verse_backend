@@ -1,6 +1,7 @@
 import express, { json } from "express"
 import { config } from "dotenv"
 import HomeRoutes from "./routes/home.routes.js"
+import admin from 'firebase-admin';
 
 config();
 const { PORT } = process.env;
@@ -25,27 +26,69 @@ const firebaseConfig = {
 // Initialize Firebase Admin SDK
 admin.initializeApp({
 	credential: admin.credential.cert(firebaseConfig),
-	databaseURL: 'https://your-firebase-project-id.firebaseio.com', // Replace with your Firebase project URL
+	databaseURL: 'https://verse-9c645-default-rtdb.asia-southeast1.firebasedatabase.app/',
 });
 
+// Push data to Firebase database
+app.post('/api/saveData', async (req, res) => {
+	try {
+		admin.database().ref('cardContents').update(dataArr).then(() => {
+			res.status(201).json({ message: 'Data updated successfully' });
+		})
+	} catch (error) {
+		console.error('Error posting data:', error);
+		res.status(500).json({ error: error.message })
+	}
+});
+
+app.get('/api/fetchContent', async (req, res) => {
+	try {
+		const path = 'cardContents';
+		const data = await admin.database().ref(path).get();
+		res.status(200).json({ data })
+	} catch (error) {
+		res.status(500).json({ error: error.mesaage })
+	}
+})
+
 // Firebase authentication endpoint
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
+	try {
+
+		const { email } = req.body;
+
+		// Validate email address
+		if (!validateEmail(email)) {
+			return res.status(400).json({ message: "Invalid email address" });
+		}
+
+		// Sign in the user with email and password
+		const userRecord = await admin.auth().getUserByEmail(email);
+		const uid = userRecord.uid;
+		const token = await admin.auth().createCustomToken(uid);
+
+		res.json({ success: true, token });
+	} catch (error) {
+		console.error('Error authenticating user:', error);
+		res.status(401).json({ success: false, error: 'Authentication failed' });
+	}
+});
+
+app.post("/api/registerUser", async (req, res) => {
 	try {
 		const { email, password } = req.body;
 
-		try {
-			// Sign in the user with email and password
-			const userRecord = await admin.auth().getUserByEmail(email);
-			const uid = userRecord.uid;
-			const token = await admin.auth().createCustomToken(uid);
-
-			res.json({ success: true, token });
-		} catch (error) {
-			console.error('Error authenticating user:', error);
-			res.status(401).json({ success: false, error: 'Authentication failed' });
+		// Validate email address
+		if (!validateEmail(email)) {
+			return res.status(400).json({ message: "Invalid email address" });
 		}
+
+		const userRecord = await admin.auth().createUser({ email, password });
+
+		res.status(200).json({ message: "User registered successfully", uid: userRecord.uid });
 	} catch (error) {
-		res.status(500).json({ error: error.message });
+		console.error("Error creating user:", error);
+		res.status(500).json({ message: "Failed to register user" });
 	}
 });
 
@@ -54,3 +97,9 @@ app.use(HomeRoutes);
 app.listen(PORT, () => {
 	console.log(`App IS running on ${PORT}`)
 });
+
+// Function to validate email address
+function validateEmail(email) {
+	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	return emailRegex.test(email);
+}
