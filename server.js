@@ -1,13 +1,21 @@
-import express, { json } from "express"
+import express, { json, static as Static } from "express"
 import { config } from "dotenv"
 import HomeRoutes from "./routes/home.routes.js"
 import admin from 'firebase-admin';
+import { resolve } from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
 
 config();
 const { PORT } = process.env;
 const app = express()
 
 app.use(json());
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// Serve Static Content
+app.use("/assets", Static(resolve(__dirname, "assets")));
 
 const firebaseConfig = {
 	type: "service_account",
@@ -55,7 +63,7 @@ app.get('/api/fetchContent', async (req, res) => {
 app.post('/api/login', async (req, res) => {
 	try {
 
-		const { email } = req.body;
+		const { email, password } = req.body;
 
 		// Validate email address
 		if (!validateEmail(email)) {
