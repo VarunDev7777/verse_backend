@@ -3,12 +3,14 @@ import { config } from "dotenv"
 import HomeRoutes from "./routes/home.routes.js"
 import admin from 'firebase-admin';
 import { resolve } from "path";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { initializeApp } from 'firebase/app';
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
 
 config();
-const { PORT } = process.env;
+const {  PORT } = process.env;
 const app = express()
 
 app.use(json());
@@ -31,12 +33,15 @@ const firebaseConfig = {
 	universe_domain: process.env.FIREBASE_UNIVERSE_DOMAIN,
 }
 
+const firebase = initializeApp(firebaseConfig);
+
+
 // Initialize Firebase Admin SDK
 admin.initializeApp({
 	credential: admin.credential.cert(firebaseConfig),
 	databaseURL: 'https://verse-9c645-default-rtdb.asia-southeast1.firebasedatabase.app/',
 });
-
+const db = admin.database();
 // Push data to Firebase database
 app.post('/api/saveData', async (req, res) => {
 	try {
@@ -61,26 +66,30 @@ app.get('/api/fetchContent', async (req, res) => {
 
 // Firebase authentication endpoint
 app.post('/api/login', async (req, res) => {
-	try {
+    try {
+        const { email, password } = req.body;
 
-		const { email, password } = req.body;
+        // Sign in the user with email and password
+        const userCredential = await admin.auth().getUserByEmail(email);
 
-		// Validate email address
-		if (!validateEmail(email)) {
-			return res.status(400).json({ message: "Invalid email address" });
-		}
+        // If there's no error, the user exists
+        // Now, you need to check the password
+        await admin.auth().updateUser(userCredential.uid, {
+            password: password
+        });
 
-		// Sign in the user with email and password
-		const userRecord = await admin.auth().getUserByEmail(email);
-		const uid = userRecord.uid;
-		const token = await admin.auth().createCustomToken(uid);
+        // Create a custom token for the user
+        const customToken = await admin.auth().createCustomToken(userCredential.uid);
 
-		res.json({ success: true, token });
-	} catch (error) {
-		console.error('Error authenticating user:', error);
-		res.status(401).json({ success: false, error: 'Authentication failed' });
-	}
+        // Send success response with custom token
+        res.json({ success: true, customToken });
+    } catch (error) {
+        // Handle authentication errors
+        console.error('Error authenticating user:', error);
+        res.status(401).json({ success: false, error: `Authentication failed - ${error.message}` });
+    }
 });
+
 
 app.post("/api/registerUser", async (req, res) => {
 	try {
@@ -99,6 +108,37 @@ app.post("/api/registerUser", async (req, res) => {
 		res.status(500).json({ message: "Failed to register user" });
 	}
 });
+
+// app.post("/api/forgetPassword", async (req, res) =>{
+// 	try {
+// 		const { email } = req.body;
+
+// 	// Validate email address
+// 	if (!validateEmail(email)) {
+// 		return res.status(400).json({ message: "Invalid email address" });
+// 	}
+
+// 	await admin.auth().generatePasswordResetLink(email).then((link) =>{  
+
+// 	});
+
+// 	} catch (error) {
+		
+// 	}
+// });
+
+// user profile 
+app.post("/api/updateUser", async (req, res) => {
+	try {
+		const {uuid} = req.query;
+		const data = req.body;
+		await db.ref(`users/${uuid}`).update(data);
+        res.status(201).json({ message: 'Data added successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error adding data' });
+	}
+})
 
 app.use(HomeRoutes);
 
